@@ -17,9 +17,38 @@ after setting up your form fields, run the "execute" function.
   require "AutoForm.php";
   $AF = new AutoForm();
 
-  // Set up your form fields here
+  // Form fields go here
 
   $AF->execute();
+```
+
+The next step is to create the fields. Here is a simple example of three fields:
+
+```
+<?php
+    require "AutoForm.php";
+    $AF = new AutoForm();
+
+    $AF->add_fields([
+        "first_name" => [
+            "label" => "First Name",
+            "validate" => "Please enter your first name"
+        ],
+        "last_name" => [
+            "label" => "Last Name",
+            "validate" => "Please enter your last name"
+        ],
+        "email" => [
+            "label" => "Email Address",
+            "validate" => [
+                "regex" => [
+                    "" => "Please enter your email address",
+                    "/.+@.+\..+/i" => false
+                ],
+                "default" => "Invalid email address"
+            ]
+        ]
+    ]);
 ```
 
 ## Author
