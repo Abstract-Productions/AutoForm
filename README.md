@@ -57,7 +57,8 @@ following example, we set the visible label and the validation message for missi
 for each field.
 
 In the block after the "execute" function, we show a simple message, using the "Santized" array, which
-holds an escaped copy of the POST variables.
+holds an escaped copy of the POST variables. We also use the head() and foot() functions to show the
+form's header and footer HTML around the response.
 
 
 ```
