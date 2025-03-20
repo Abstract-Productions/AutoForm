@@ -1,6 +1,7 @@
 # AutoFrom
 
-An easy form generator for PHP 8+
+An easy form generator for PHP 8+. No bulky frameworks or dependencies, just one small PHP include and
+one small JavaScript file.
 
 ## Description
 
@@ -25,16 +26,17 @@ create your own with your own customizations.
   require "AutoForm.php";
   $AF = new AutoForm([
     "header" => <<<EOF
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
     <script src="AutoForm.js"></script>
     <link rel="stylesheet" href="AutoForm.css">
+    <title>Sample Form</title>
   </head>
   <body>
     <h1>Sample Form</h1>
+
 EOF,
     "footer" => <<<EOF
   </body>
@@ -63,16 +65,17 @@ holds an escaped copy of the POST variables.
   require "AutoForm.php";
   $AF = new AutoForm([
     "header" => <<<EOF
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
     <script src="AutoForm.js"></script>
     <link rel="stylesheet" href="AutoForm.css">
+    <title>Sample Form</title>
   </head>
   <body>
     <h1>Sample Form</h1>
+
 EOF,
     "footer" => <<<EOF
   </body>
@@ -96,7 +99,9 @@ EOF
   ]);
 
   if ($AF->execute()) {
-    print "<p>Thank you for filling in the form, ".$AF->Sanitized['firstname']."!</p>\n";
+    $AF->head();
+    print "<p>Thank you for filling in the form, ".$AF->Sanitized['first_name']."!</p>\n";
+    $AF->foot();
   }
 ```
 
