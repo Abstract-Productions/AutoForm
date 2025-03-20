@@ -1,0 +1,41 @@
+af-field {
+  display: flex;
+  margin-bottom: 12px;
+
+  label {
+    flex: 0 0 200px;
+    padding-top: 6px;
+  }
+
+  af-value {
+    flex: 1;
+  }
+
+  input, select, textarea {
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+
+    &.valid {
+      border-color: #8f8;
+    }
+
+    &.valid {
+      border-color: #f00;
+    }
+  }
+
+  af-error {
+    display: block;
+    color: #f00;
+
+    &:empty {
+      display: none;
+    }
+  }
+
+  textarea {
+    width: 300px;
+    height: 70px;
+  }
+}

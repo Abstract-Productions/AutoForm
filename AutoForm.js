@@ -6,7 +6,8 @@
 // Default form name is form1 but can change it after including autoform.js
 let AF_FORM_NAME = "form1", AF_select_label = "", AF_field_list = [];
 
-customElements.define("af-field", class extends HTMLElement {});
+for (let lmnt of ["af-field", "af-value", "af-error"])
+  customElements.define(lmnt, class extends HTMLElement {});
 
 // Shortcut to set options in a DOM element and/or append it to another element
 function set_elops(elem, elops, appendto = "", children = []) {
@@ -257,6 +258,32 @@ function repop_form(allofit) {
   }
 }
 
-function af_submit_form() {
-  document.form1.submit(); 
+function af_submit_form(ajax_validation, up_to = "") {
+  if (ajax_validation) {
+    let Fieldlist = Object.keys(AF_FIELDS);
+    for (let i in Fieldlist) {
+      Fieldlist[i] += get_val(Fieldlist[i] + "[]") !== undefined ? "[]" : "";
+    }
+    let SubmitVals = get_val(Fieldlist);
+    SubmitVals.af_action = "ajax";
+    post_ajax(document[AF_FORM_NAME].action, SubmitVals).then(response => {
+      if (response === "OK") {
+        document[AF_FORM_NAME].submit();
+        return;
+      }
+      let json_data = JSON.parse(response);
+      if (is_obj(json_data)) af_show_errors(json_data);
+      else console.error("Invalid AJAX response");
+    });
+  }
+  else document[AF_FORM_NAME].submit(); 
+  el("af-submit-button").disabled = true;
+  setTimeout(() => el("af-submit-button").disabled = false, 4000);
+}
+
+function af_show_errors(Errors) {
+  set_param("form af-error", "textContent", "");
+  for (let i in Errors) {
+    el(`af-err-${i}`).textContent = Errors[i];
+  }
 }
