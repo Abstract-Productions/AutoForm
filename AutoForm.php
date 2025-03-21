@@ -2,13 +2,14 @@
   # AutoForm by Mark Hall
   # https://abstract-productions.net
   if (!isset($_SESSION)) session_start();
+  if (empty($_SESSION['start_timestamp'])) $_SESSION['start_timestamp'] = time();
 
   class AutoForm {
     public $header;
     public $footer;
     public $Input;
     public $Sanitized;
-    
+ 
     public $form_name;
     public $method;
     public $enctype;
@@ -16,6 +17,7 @@
     public $submit_label;
     public $fields = [];
     public $errors = [];
+    private $robot_delay;
 
     public $form_valid = true;
 
@@ -31,6 +33,7 @@
       $this->submit_label = $Options['submit_label'] ?? "Submit";
       $this->header = $Options['header'] ?? "";
       $this->footer = $Options['footer'] ?? "";
+      $this->robot_delay = $Options['robot_delay'] ?? 5;
     }
 
     public function sanitize($Input) {
@@ -39,10 +42,11 @@
       return $Input;
     }
 
-    public function execute() {
+    public function execute($Fields = []) {
+      if (!empty($Fields)) $this->add_fields($Fields);
       if (!$this->form_valid) die("ERROR: Invalid form settings");
 
-      if (in_array($this->Input['af_action'] ?? "", ["continue", "ajax"])) {
+      if (in_array($this->Input['af_action'] ?? "", [hash("sha256", "continue$_SESSION[start_timestamp]"), "ajax"])) {
         $this->errors = $this->validate();
         if ($this->Input['af_action'] == "ajax") {
           print empty($this->errors) ? "OK" : json_encode($this->errors);
@@ -67,35 +71,33 @@
           $check = $this->Input[$Field['field_name'] ?? ""] ?? "";
           if (is_array($Field['validate'])) {
             foreach ($Field['validate'] as $v_type => $Values) {
-              if ($v_type == "default") {
-                $res = $Values;
-                break;
-              }
-              else if (in_array($v_type, ["email", "required", "integer", "number"])) {
-                $pregs = [
-                  "email" => '/^(([^\r\n\[\]\(\)"@,:;\. ]+)\.?)*[^\r\n\[\]\(\)"@,:;\. ]+'.
-                             '@(\[?([0-9]{1,3}\.){3}[0-9]{1,3}\]?|'.
-                             '(([a-z0-9][a-z0-9\-]*)\.)+[a-z]+)$/i',
-                  "required" => '/.+/',
-                  "integer" => '/^-?[0-9]+$/',
-                  "number" => '/^-?[0-9]+(\.[0-9]+)?$/'
-                ];
+              $pregs = [
+                "default" => '/x\by/',
+                "required" => '/.+/',
+                "email" => '/^(([^\r\n\[\]\(\)"@,:;\. ]+)\.?)*[^\r\n\[\]\(\)"@,:;\. ]+'.
+                           '@(\[?([0-9]{1,3}\.){3}[0-9]{1,3}\]?|'.
+                           '(([a-z0-9][a-z0-9\-]*)\.)+[a-z]+)$/i',
+                "integer" => '/^-?[0-9]+$/',
+                "number" => '/^-?[0-9]+(\.[0-9]+)?$/',
+                "date" => '/^[1-2][0-9]{3}-[0-1][0-9]-[0-3][0-9]$/'
+              ];
+              if (in_array($v_type, array_keys($pregs))) {
                 if (!preg_match($pregs[$v_type], $check)) {
                   $res = $Values;
                   break;
                 }
               }
-              else if (preg_match('/^(>=?|<=?|<>|==?)[0-9]+(\.[0-9]+)?(,(>=?|<=?|<>|==?)[0-9]+(\.[0-9]+)?)*$/', $v_type)) {
+              else if (preg_match('/^(>=?|<=?|<>|==?|!=) ?[0-9]+(\.[0-9]+)?(,(>=?|<=?|<>|==?|!=) ?[0-9]+(\.[0-9]+)?)*$/', $v_type)) {
                 $Expr = explode(",", $v_type);
                 foreach ($Expr as $expr) {
-                  preg_match('/^(>=?|<=?|<>|==?)([0-9]+(\.[0-9]+)?)/', $expr, $match);
+                  preg_match('/^(>=?|<=?|<>|==?|!=) ?([0-9]+(\.[0-9]+)?)/', $expr, $match);
                   $expr_res = match($match[1]) {
-                    ">" => $check > $match[2],
-                    ">=" => $check >= $match[2],
-                    "<" => $check < $match[2],
-                    "<=" => $check <= $match[2],
-                    "=", "==" => $check == $match[2],
-                    "<>" => $check != $match[2],
+                    ">" => $check <= $match[2],
+                    ">=" => $check < $match[2],
+                    "<" => $check >= $match[2],
+                    "<=" => $check > $match[2],
+                    "=", "==" => $check != $match[2],
+                    "<>", "!=" => $check == $match[2],
                     default => false
                   };
                   if ($expr_res) {
@@ -107,7 +109,7 @@
               else if (is_array($Values)) {
                 foreach ($Values as $val => $val_res) {
                   if (($v_type == "regex" && preg_match($val, $check)) ||
-                    ($v_type == "match" && $check == $val)) {
+                      ($v_type == "match" && $check == $val)) {
                     $res = $val_res;
                     break 2;
                   }
@@ -120,24 +122,29 @@
             else $res = 'Field "'.($Field['label'] ?: $Field['field_name']).'" is missing';
           }
         }
-        if ($res) $validate_response[$Field['field_name']] = $res;
+        if ($res) $validate_response[$Field['field_name']] = is_callable($res) ? $res($this) : $res;
+      }
+      $delay = time() - $_SESSION['start_timestamp'];
+      if ($delay < $this->robot_delay || $delay > 3600) {
+        $validate_response['other-errs'] = "Possible robot detected";
       }
       return $validate_response;
     }
 
     public function head() {
-      print $this->header;
+      print is_callable($this->header) ? ($this->header)($this) : $this->header;
     }
 
     public function foot() {
-      print $this->footer;
+      print is_callable($this->footer) ? ($this->footer)($this) : $this->footer;
     }
 
     public function display_form() {
-      print $this->header;
+      $_SESSION['start_timestamp'] = time();
+      $this->head();
       print '<form name="'.$this->form_name.'" action="'.$_SERVER['SCRIPT_NAME'].'" method="'.$this->method.'">'."\n";
       foreach ($this->fields as $Field) {
-        if ($Field['type'] == "html") print "$Field[html]\n";
+        if ($Field['type'] == "html") print is_callable($Field['html']) ? $Field['html']() : "$Field[html]\n";
         else {
           $labeled_by = "";
           if (!in_array($Field['type'], ["radio", "checkbox"])) {
@@ -152,7 +159,7 @@
           if (in_array($Field['type'], ["select", "multiselect"])) {
             [$brax, $mult] = $Field['type'] == "multiselect" ? ["[]", " multiple"] : ["", ""];
             print "      <select id=\"af-$Field[field_name]\" name=\"$Field[field_name]$brax\"$mult>\n";
-            foreach ($Field['vals'] as $val => $label) {
+            foreach ($Field['values'] as $val => $label) {
               print "        <option value=\"$val\">$label</option>\n";
             }
             print "      </select>\n";
@@ -160,8 +167,8 @@
           else if (in_array($Field['type'], ["checkbox", "radio"])) {
             $vid = 0;
             $brax = "";
-            if ($Field['type'] == "checkbox" && count($Field['vals']) > 1) $brax = "[]";
-            foreach ($Field['vals'] as $val => $label) {
+            if ($Field['type'] == "checkbox" && count($Field['values']) > 1) $brax = "[]";
+            foreach ($Field['values'] as $val => $label) {
               print "    <input id=\"af-$Field[field_name]-$vid\" type=\"$Field[type]\" name=\"$Field[field_name]$brax\" value=\"$val\">";
               print "<label for=\"af-$Field[field_name]-$vid\"> $label</label>\n";
               $vid++;
@@ -176,7 +183,8 @@
           print "  </af-field>\n";
         }
       }
-      print '  <input type="hidden" name="af_action" value="continue">'."\n";
+      print "  <af-error id=\"af-err-other-errs\"></af-error>\n";
+      print '  <input type="hidden" name="af_action" value="'.hash("sha256", "continue$_SESSION[start_timestamp]").'">'."\n";
       print '  <input type="button" id="af-submit-button" onclick="af_submit_form('.($this->ajax ? "true" : "false").');" value="'.$this->submit_label.'">'."\n";
       print "</form>\n";
 
@@ -186,7 +194,7 @@
       foreach ($this->fields as $Field) {
         if (!isset($Field['field_name'])) continue;
         $Rpop[$Field['field_name']] = $this->Input[$Field['field_name']] ?? (
-          ($this->Input['af_action'] ?? "") == "continue" ? "" : $Field['default']
+          ($this->Input['af_action'] ?? "") == hash("sha256", "continue$_SESSION[start_timestamp]") ? "" : $Field['default']
         );
       }
       unset($Rpop['af_action']);
@@ -194,36 +202,32 @@
       print "repop_form(AF_FIELDS);\n";
       if (!empty($this->errors)) print "af_show_errors(".json_encode($this->errors).");\n";
       print "</script>\n";
-      print $this->footer;
+      $this->foot();
     }
 
     public function add_fields($Arr = []) {
       foreach ($Arr as $field_name => $Info) {
-        if (is_string($Info)) $this->add_html($Info);
-        else $this->add_field(
-          $field_name,
-          $Info['type'] ?? "text",
-          $Info['label'] ?? NULL,
-          $Info['validate'] ?? false,
-          $Info['vals'] ?? [],
-          $Info['default'] ?? ""
-        );
+        if (is_string($Info) || is_callable($Info)) $this->add_html($Info);
+        else $this->add_field($field_name, $Info['type'] ?? "text", $Info);
       }
       return true;
     }
 
-    public function add_field($field_name, $type = "text", $label = NULL, $validate = false, $vals = [], $default = "") {
+    public function add_field($field_name, $type = "text", $label = NULL, $validate = false, $values = [], $default = "") {
       if (str_contains($field_name, "/")) [$type, $field_name] = explode("/", $field_name, 2);
-      if (in_array($field_name, ["af_action", "af_page", "action"])) {
+      if (is_array($label)) {
+        $Info = $label;
+        $label = $Info['label'] ?? NULL;
+        $validate = $Info['validate'] ?? $validate;
+        $values = $Info['values'] ?? $values;
+        $default = $Info['default'] ?? $default;
+        unset($Info);
+      }
+      if (in_array($field_name, ["af_action", "af_page", "action", "other-errs"])) {
         return $this->warn("create_field: reserved field name ($field_name). Please use a different name");
       }
       else if (!preg_match('/^[a-z_]+[0-9a-z\-_\.:]*$/i', $field_name)) {
         return $this->warn("create_field: invalid field name ($field_name)");
-      }
-      foreach ($this->fields as $Field) {
-        if (($Field['field_name'] ?? "") == $field_name) {
-          return $this->warn("create_field: duplicate field name ($field_name)");
-        }
       }
       if (!in_array($type, [
         "text", "number", "date", "email", "search", "tel", "select", "multiselect", "radio",
@@ -238,7 +242,7 @@
         "type" => $type,
         "validate" => $validate,
         "default" => $default,
-        "vals" => $vals
+        "values" => $values
       ];
       if ($type == "file") {
         if ($this->method != "POST") return $this->warn("GET method is incompatible with file inputs");
@@ -247,24 +251,24 @@
       return true;
     }
 
-    public function add_select($field_name, $label = "", $validate = false, $vals = [], $default = "") {
-      $this->add_field($field_name, "select", $label, $validate, $vals, $default);
+    public function add_select($field_name, $label = "", $validate = false, $values = [], $default = "") {
+      $this->add_field($field_name, "select", $label, $validate, $values, $default);
     }
 
-    public function add_text($field_name, $label = "", $validate = false, $vals = [], $default = "") {
-      $this->add_field($field_name, "text", $label, $validate, $vals, $default);
+    public function add_text($field_name, $label = "", $validate = false, $values = [], $default = "") {
+      $this->add_field($field_name, "text", $label, $validate, $values, $default);
     }
     
-    public function add_textarea($field_name, $label = "", $validate = false, $vals = [], $default = "") {
-      $this->add_field($field_name, "textarea", $label, $validate, $vals, $default);
+    public function add_textarea($field_name, $label = "", $validate = false, $values = [], $default = "") {
+      $this->add_field($field_name, "textarea", $label, $validate, $values, $default);
     }
 
-    public function add_radio($field_name, $label = "", $validate = false, $vals = [], $default = "") {
-      $this->add_field($field_name, "radio", $label, $validate, $vals, $default);
+    public function add_radio($field_name, $label = "", $validate = false, $values = [], $default = "") {
+      $this->add_field($field_name, "radio", $label, $validate, $values, $default);
     }
 
-    public function add_checkbox($field_name, $label = "", $validate = false, $vals = [], $default = "") {
-      $this->add_field($field_name, "checkbox", $label, $validate, $vals, $default);
+    public function add_checkbox($field_name, $label = "", $validate = false, $values = [], $default = "") {
+      $this->add_field($field_name, "checkbox", $label, $validate, $values, $default);
     }
 
     public function add_html($html) {

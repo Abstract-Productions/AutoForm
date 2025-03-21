@@ -101,10 +101,13 @@ EOF
 
   if ($AF->execute()) {
     $AF->head();
-    print "<p>Thank you for filling in the form, ".$AF->Sanitized['first_name']."!</p>\n";
+    print "<p>Thank you for filling in the form, {$AF->Sanitized[first_name]}!</p>\n";
     $AF->foot();
   }
 ```
+
+This is just the tip of the iceberg - there are many more options for field and form settings and
+validation, and I'm working on the documentation for those.
 
 ## Author
 

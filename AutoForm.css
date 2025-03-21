@@ -25,17 +25,17 @@ af-field {
     }
   }
 
-  af-error {
-    display: block;
-    color: #f00;
-
-    &:empty {
-      display: none;
-    }
-  }
-
   textarea {
     width: 300px;
     height: 70px;
+  }
+}
+
+af-error {
+  display: block;
+  color: #f00;
+
+  &:empty {
+    display: none;
   }
 }

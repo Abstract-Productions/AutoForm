@@ -21,46 +21,6 @@ function set_elops(elem, elops, appendto = "", children = []) {
   return appendto ? get_elem(appendto).appendChild(elem) : elem;
 }
 
-// Shortcuts to get/set parameter without using document.getElementById
-// If ID doesn't exist, try the element of AF_FORM_NAME
-function get_param(id, param) {
-  if (is_obj(id)) {
-    for (let i in id) id[i] = get_param(i, (is_arr(id[i]) || is_obj(id[i])) ? id[i] : [id[i]]);
-    return id;
-  }
-  if (is_arr(param)) {
-    let results = {};
-    for (let i of param) results[i] = get_param(id, i);
-    return results;
-  }
-  if (is_obj(param)) {
-    for (let i in param) param[i] = get_param(id, i);
-    return param;
-  }
-  let elm = get_elem(id);
-  if (elm === undefined) return console.error(`get_param: no element found for ID ${id}`);
-  if (elm === null) return console.error(`get_param: element is null for ID ${id}`);
-  param = param.split(".");
-  return param[1] ? elm[param[0]][param[1]] : elm[param[0]];
-}
-
-function get_style(id, param) {
-  if (is_obj(id)) {
-    for (let i in id) id[i] = get_style(i, (is_arr(id[i]) || is_obj(id[i])) ? id[i] : [id[i]]);
-    return id;
-  }
-  if (is_arr(param)) {
-    let results = {};
-    param.forEach(i => results[i] = get_param(id, `style.${i}`));
-    return results;
-  }
-  if (is_obj(param)) {
-    for (let i in param) param[i] = get_param(id, `style.${i}`);
-    return param;
-  }
-  return get_param(id, `style.${param}`);
-}
-
 function set_param(id, param, val) {
   let results = {};
   if (is_obj(id))
@@ -91,27 +51,13 @@ function set_style(id, param, val) {
   return results;
 }
 
-function set_plaintext(id, val = "", html = false) {
-  if (val === true) html = true;
+function set_plaintext(id, val = "") {
   if (is_obj(id)) {
     let results = {};
     for (let i in id) results[i] = set_plaintext(i, id[i], html);
     return results;
   }
-  return set_param(id, html ? "innerHTML" : "textContent", (typeof val === "string" ? val : val.toString()).replace(/\\/g, "\\\\"));
-}
-
-function get_plaintext(id, html = false) {
-  if (is_arr(id)) {
-    let results = {};
-    for (let i of id) results[i] = get_plaintext(i, html);
-    return results;
-  }
-  if (is_obj(id)) {
-    for (let i in id) id[i] = get_plaintext(i, html);
-    return id;
-  }
-  return get_param(id, html ? "innerHTML" : "textContent");
+  return set_param(id, "textContent", (typeof val === "string" ? val : val.toString()).replace(/\\/g, "\\\\"));
 }
 
 function el() {
@@ -128,8 +74,6 @@ function get_elem() {
 }
 
 var qs = i => i instanceof NodeList ? i : document.querySelectorAll(i),
-get_html = id => get_plaintext(id, true),
-set_html = (id, val = "") => set_plaintext(id, val, true),
 is_obj = i => typeof i === "object" && i !== null && !is_el(i),
 is_arr = i => i instanceof Array,
 is_el = i => i instanceof Element,
