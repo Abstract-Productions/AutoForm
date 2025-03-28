@@ -14,6 +14,7 @@
     public $method;
     public $enctype;
     public $ajax;
+    public $ajax_as_you_go;
     public $submit_label;
     public $fields = [];
     public $errors = [];
@@ -30,6 +31,7 @@
       $this->form_name = $Options['form_name'] ?? "form1";
       $this->enctype = $Options['enctype'] ?? "";
       $this->ajax = $Options['ajax'] ?? true;
+      $this->ajax_as_you_go = $Options['ajax_as_you_go'] ?? false;
       $this->submit_label = $Options['submit_label'] ?? "Submit";
       $this->header = $Options['header'] ?? "";
       $this->footer = $Options['footer'] ?? "";
@@ -47,7 +49,7 @@
       if (!$this->form_valid) die("ERROR: Invalid form settings");
 
       if (in_array($this->Input['af_action'] ?? "", [hash("sha256", "continue$_SESSION[start_timestamp]"), "ajax"])) {
-        $this->errors = $this->validate();
+        $this->errors = $this->validate($this->Input['af_up_to'] ?? "");
         if ($this->Input['af_action'] == "ajax") {
           print empty($this->errors) ? "OK" : json_encode($this->errors);
           return false;
@@ -92,12 +94,12 @@
                 foreach ($Expr as $expr) {
                   preg_match('/^(>=?|<=?|<>|==?|!=) ?([0-9]+(\.[0-9]+)?)/', $expr, $match);
                   $expr_res = match($match[1]) {
-                    ">" => $check <= $match[2],
-                    ">=" => $check < $match[2],
-                    "<" => $check >= $match[2],
-                    "<=" => $check > $match[2],
-                    "=", "==" => $check != $match[2],
-                    "<>", "!=" => $check == $match[2],
+                    ">" => $check > $match[2],
+                    ">=" => $check >= $match[2],
+                    "<" => $check < $match[2],
+                    "<=" => $check <= $match[2],
+                    "=", "==" => $check == $match[2],
+                    "<>", "!=" => $check != $match[2],
                     default => false
                   };
                   if ($expr_res) {
@@ -123,6 +125,7 @@
           }
         }
         if ($res) $validate_response[$Field['field_name']] = is_callable($res) ? $res($this) : $res;
+        if ($Field['field_name'] == $up_to) return $validate_response;
       }
       $delay = time() - $_SESSION['start_timestamp'];
       if ($delay < $this->robot_delay || $delay > 3600) {
@@ -139,28 +142,53 @@
       print is_callable($this->footer) ? ($this->footer)($this) : $this->footer;
     }
 
+    public function set_head($header) {
+      $this->header = $header;
+    }
+
+    public function set_foot($footer) {
+      $this->footer = $footer;
+    }
+
     public function display_form() {
       $_SESSION['start_timestamp'] = time();
       $this->head();
-      print '<form name="'.$this->form_name.'" action="'.$_SERVER['SCRIPT_NAME'].'" method="'.$this->method.'">'."\n";
+      print $this->tag("form", [
+        "id" => "af-form",
+        "name" => $this->form_name,
+        "action" => $_SERVER['SCRIPT_NAME'],
+        "method" => $this->method
+      ]);
       foreach ($this->fields as $Field) {
         if ($Field['type'] == "html") print is_callable($Field['html']) ? $Field['html']() : "$Field[html]\n";
         else {
           $labeled_by = "";
           if (!in_array($Field['type'], ["radio", "checkbox"])) {
             print "  <af-field>\n";
-            print "    <label for=\"af-$Field[field_name]\">$Field[label]</label>\n";
+            print "    ".$this->tag("label", [
+              "for" => "af-$Field[field_name]"
+            ], $this->sanitize($Field['label']));
           }
           else {
-            print "  <af-field role=\"".($Field['type'] == "radio" ? "radio" : "")."group\" labeled-by=\"af-label-$Field[field_name]\">\n";
-            print "    <label id=\"af-label-$Field[field_name]\">$Field[label]</label>\n";
+            print "    ".$this->tag("af-field", [
+              "role" => ($Field['type'] == "radio" ? "radio" : "")."group",
+              "labeled-by" => "af-label-$Field[field_name]"
+            ]);
+            print "    ".$this->tag(
+              "label",
+              ["id" => "af-label-$Field[field_name]"],
+              $this->sanitize($Field['label'])
+            );
           }
           print "    <af-value>\n";
           if (in_array($Field['type'], ["select", "multiselect"])) {
             [$brax, $mult] = $Field['type'] == "multiselect" ? ["[]", " multiple"] : ["", ""];
-            print "      <select id=\"af-$Field[field_name]\" name=\"$Field[field_name]$brax\"$mult>\n";
+            print "      ".$this->tag("select", [
+              "id" => "af-$Field[field_name]",
+              "name" => "$Field[field_name]$brax"
+            ], NULL, $mult);
             foreach ($Field['values'] as $val => $label) {
-              print "        <option value=\"$val\">$label</option>\n";
+              print "        ".$this->tag("option", ["value" => $val], $this->sanitize($label));
             }
             print "      </select>\n";
           }
@@ -169,23 +197,55 @@
             $brax = "";
             if ($Field['type'] == "checkbox" && count($Field['values']) > 1) $brax = "[]";
             foreach ($Field['values'] as $val => $label) {
-              print "    <input id=\"af-$Field[field_name]-$vid\" type=\"$Field[type]\" name=\"$Field[field_name]$brax\" value=\"$val\">";
-              print "<label for=\"af-$Field[field_name]-$vid\"> $label</label>\n";
+              print "      ".$this->tag("input", [
+                "id" => "af-$Field[field_name]-$vid",
+                "type" => $Field['type'],
+                "name" => "$Field[field_name]$brax",
+                "value" => $val
+              ]);
+              print "      ".$this->tag("label", [
+                "for" => "af-$Field[field_name]-$vid"
+              ], " ".$this->sanitize($label));
               $vid++;
             }
           }
           else if ($Field['type'] == "textarea") {
-            print    "      <textarea id=\"af-$Field[field_name]\" name=\"$Field[field_name]\"></textarea>\n";
+            print    "      ".$this->tag("textarea", [
+              "id" => "af-$Field[field_name]",
+              "name" => $Field['field_name']
+            ], "");
           }
-          else print "      <input type=\"$Field[type]\" id=\"af-$Field[field_name]\" name=\"$Field[field_name]\">\n";
-          print "      <af-error id=\"af-err-$Field[field_name]\"></af-error>\n";
+          else {
+            print "      ".$this->tag("input", [
+              "type" => $Field['type'],
+              "id" => "af-$Field[field_name]",
+              "name" => $Field['field_name'],
+              "list" => !empty($Field['values']) ? "af-list-$Field[field_name]" : NULL
+            ] + $Field['attributes']);
+            if (!empty($Field['values'])) {
+              print "      ".$this->tag("datalist", ["id" => "af-list-$Field[field_name]"]);
+              foreach ($Field['values'] as $key => $val) {
+                print "        ".$this->tag("option", ["value" => $val]);
+              }
+              print "      </datalist>\n";
+            }
+          }
+          print "      ".$this->tag("af-error", ["id" => "af-err-$Field[field_name]"], "");
           print "    </af-value>\n";
           print "  </af-field>\n";
         }
       }
-      print "  <af-error id=\"af-err-other-errs\"></af-error>\n";
-      print '  <input type="hidden" name="af_action" value="'.hash("sha256", "continue$_SESSION[start_timestamp]").'">'."\n";
-      print '  <input type="button" id="af-submit-button" onclick="af_submit_form('.($this->ajax ? "true" : "false").');" value="'.$this->submit_label.'">'."\n";
+      print "  ".$this->tag("af-error", ["id" => "af-err-other-errs"], "");
+      print "  ".$this->tag("input", [
+        "type" => "hidden",
+        "name" => "af_action",
+        "value" => hash("sha256", "continue$_SESSION[start_timestamp]")
+      ]);
+      print "  ".$this->tag("input", [
+        "type" => "button",
+        "id" => "af-submit-button",
+        "value" => $this->submit_label
+      ]);
       print "</form>\n";
 
       print "<script>\n";
@@ -199,7 +259,8 @@
       }
       unset($Rpop['af_action']);
       print "let AF_FIELDS = ".json_encode($Rpop).";\n";
-      print "repop_form(AF_FIELDS);\n";
+      print "af_repop_form(AF_FIELDS);\n";
+      print "af_init(".($this->ajax ? "true" : "false").", ".($this->ajax_as_you_go ? "true" : "false").");\n";
       if (!empty($this->errors)) print "af_show_errors(".json_encode($this->errors).");\n";
       print "</script>\n";
       $this->foot();
@@ -213,7 +274,7 @@
       return true;
     }
 
-    public function add_field($field_name, $type = "text", $label = NULL, $validate = false, $values = [], $default = "") {
+    public function add_field($field_name, $type = "text", $label = NULL, $validate = false, $values = [], $default = "", $Attributes = []) {
       if (str_contains($field_name, "/")) [$type, $field_name] = explode("/", $field_name, 2);
       if (is_array($label)) {
         $Info = $label;
@@ -242,7 +303,8 @@
         "type" => $type,
         "validate" => $validate,
         "default" => $default,
-        "values" => $values
+        "values" => $values,
+        "attributes" => $Attributes
       ];
       if ($type == "file") {
         if ($this->method != "POST") return $this->warn("GET method is incompatible with file inputs");
@@ -251,24 +313,24 @@
       return true;
     }
 
-    public function add_select($field_name, $label = "", $validate = false, $values = [], $default = "") {
-      $this->add_field($field_name, "select", $label, $validate, $values, $default);
+    public function add_select($field_name, $label = "", $validate = false, $values = [], $default = "", $Attributes = []) {
+      $this->add_field($field_name, "select", $label, $validate, $values, $default, $Attributes);
     }
 
-    public function add_text($field_name, $label = "", $validate = false, $values = [], $default = "") {
-      $this->add_field($field_name, "text", $label, $validate, $values, $default);
+    public function add_text($field_name, $label = "", $validate = false, $values = [], $default = "", $Attributes = []) {
+      $this->add_field($field_name, "text", $label, $validate, $values, $default, $Attributes);
     }
     
-    public function add_textarea($field_name, $label = "", $validate = false, $values = [], $default = "") {
-      $this->add_field($field_name, "textarea", $label, $validate, $values, $default);
+    public function add_textarea($field_name, $label = "", $validate = false, $values = [], $default = "", $Attributes = []) {
+      $this->add_field($field_name, "textarea", $label, $validate, $values, $default, $Attributes);
     }
 
-    public function add_radio($field_name, $label = "", $validate = false, $values = [], $default = "") {
-      $this->add_field($field_name, "radio", $label, $validate, $values, $default);
+    public function add_radio($field_name, $label = "", $validate = false, $values = [], $default = "", $Attributes = []) {
+      $this->add_field($field_name, "radio", $label, $validate, $values, $default, $Attributes);
     }
 
-    public function add_checkbox($field_name, $label = "", $validate = false, $values = [], $default = "") {
-      $this->add_field($field_name, "checkbox", $label, $validate, $values, $default);
+    public function add_checkbox($field_name, $label = "", $validate = false, $values = [], $default = "", $Attributes = []) {
+      $this->add_field($field_name, "checkbox", $label, $validate, $values, $default, $Attributes);
     }
 
     public function add_html($html) {
@@ -286,6 +348,21 @@
         }
       }
       return $this->warn("add_validation: field not found ($field_name)");
+    }
+    
+    public function att($Attribs = []) {
+      $att_string = "";
+      foreach ($Attribs as $attrib => $val) {
+        if (is_null($val)) continue;
+        $att_string .= " ".$attrib.'="'.$this->sanitize($val).'"';
+      }
+      return $att_string;
+    }
+
+    public function tag($tag_name, $Attribs = [], $close_after = NULL, $xtra = "") {
+      $tag_string = "<$tag_name".$this->att($Attribs)."$xtra>";
+      if (!is_null($close_after)) $tag_string .= "$close_after</$tag_name>";
+      return "$tag_string\n";
     }
 
     private function warn($message) {

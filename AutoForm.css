@@ -1,8 +1,14 @@
+form#af-form {
+  display: block;
+  width: 100%;
+  container-type: inline-size;
+}
+
 af-field {
   display: flex;
   margin-bottom: 12px;
 
-  label {
+  & > label {
     flex: 0 0 200px;
     padding-top: 6px;
   }
@@ -15,6 +21,7 @@ af-field {
     padding: 8px;
     border-radius: 4px;
     border: 1px solid #ccc;
+    background: #fff;
 
     &.valid {
       border-color: #8f8;
@@ -37,5 +44,15 @@ af-error {
 
   &:empty {
     display: none;
+  }
+}
+
+@container (max-width: 600px) {
+  af-field {
+    display: block;
+
+    & > label {
+      display: block;
+    }
   }
 }

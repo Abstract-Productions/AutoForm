@@ -1,4 +1,4 @@
-# AutoFrom
+# AutoForm
 
 An easy form generator for PHP 8+. No bulky frameworks or dependencies, just one small PHP include and
 one small JavaScript file.
@@ -10,15 +10,15 @@ also handles data validation and robot detection.
 
 ## Usage
 
-Install AutoForm.php in your project directory and require it. Instantiate the AutoForm object, then
+Copy AutoForm.php into your project directory and require it. Instantiate the AutoForm object, then
 after setting up your form fields, use the "execute" function, which will return TRUE only when all
 fields are filled out and validation is passed.
 
 The HTML around the form can be set via "header" and "footer" variables in the object, which can be
 passed in an array when instantiating the object.
 
-In our header, we'll include the AutoForm.js script, which is necessary. The package also comes in with
-a premade AutoForm.css which sets some default styles to the form elements. You can edit this file or
+In our header, we'll include the AutoForm.js script, which is necessary. The package also comes with a
+premade AutoForm.css which sets some default styles to the form elements. You can edit this file or
 create your own with your own customizations.
 
 ```
