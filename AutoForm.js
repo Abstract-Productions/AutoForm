@@ -64,14 +64,14 @@ af_build_query = params => af_is_obj(params) ? Object.keys(params).map(key => af
 af_new_el = (elname, elops = {}, appendto = "", children = []) => af_set_elops(document.createElement(elname), elops, appendto, children);
 
 // Get value from whatever kind of field it's in
-function get_val(fname) {
+function af_get_val(fname) {
   if (af_is_arr(fname)) {
     let results = {};
-    fname.forEach(fn => results[fn] = get_val(fn));
+    fname.forEach(fn => results[fn] = af_get_val(fn));
     return results;
   }
   if (af_is_obj(fname)) {
-    for (let fn in fname) fname[fn] = get_val(fn);
+    for (let fn in fname) fname[fn] = af_get_val(fn);
     return fname;
   }
 
@@ -167,7 +167,7 @@ function af_post_ajax(fname, post_vars = []) {
 function af_repop_form(allofit) {
   for (let x in allofit) {
     if (x == "indexOf") continue;
-    if (get_val(x) === undefined) get_val(`${x}[]`) !== undefined ? 
+    if (af_get_val(x) === undefined) af_get_val(`${x}[]`) !== undefined ? 
       af_set_val(`${x}[]`, allofit[x]) :
       af_new_el("input", {type: "hidden", name: x, value: allofit[x]}, document.forms[AF_FORM_NAME]);
     else af_set_val(x, allofit[x]);
@@ -178,11 +178,11 @@ function af_submit_form(ajax_validation, up_to = "") {
   if (ajax_validation) {
     let Fieldlist = Object.keys(AF_FIELDS);
     for (let i in Fieldlist) {
-      Fieldlist[i] += get_val(Fieldlist[i] + "[]") !== undefined ? "[]" : "";
+      Fieldlist[i] += af_get_val(Fieldlist[i] + "[]") !== undefined ? "[]" : "";
       if (up_to == Fieldlist[i]) break;
     }
-    let SubmitVals = get_val(Fieldlist);
-    SubmitVals.af_action = "ajax";
+    let SubmitVals = af_get_val(Fieldlist);
+    SubmitVals.af_action = af_ajax_action;
     SubmitVals.af_up_to = up_to;
     af_post_ajax(document[AF_FORM_NAME].action, SubmitVals).then(response => {
       if (response === "OK") {
