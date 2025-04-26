@@ -16,9 +16,10 @@
     public $ajax;
     public $ajax_as_you_go;
     public $submit_label;
-    public $fields = [];
     public $errors = [];
-    private $robot_delay;
+    public $fields = [];
+    public $robot_delay;
+    public $pages;
 
     public $form_valid = true;
 
@@ -36,6 +37,8 @@
       $this->header = $Options['header'] ?? "";
       $this->footer = $Options['footer'] ?? "";
       $this->robot_delay = $Options['robot_delay'] ?? 5;
+      $this->pages = 1;
+      if (empty($this->Input['af_page'])) $this->Input['af_page'] = 1;
     }
 
     public function sanitize($Input) {
@@ -54,7 +57,13 @@
           print empty($this->errors) ? "OK" : json_encode($this->errors);
           return false;
         }
-        if (empty($this->errors)) return true;
+        if (empty($this->errors)) {
+          if ($this->Input['af_page'] == $this->pages) return true;
+          else {
+            $this->inp_set("af_page", $this->Input['af_page'] + 1);
+            $this->inp_set("af_action", "");
+          }
+        }
       }
       $this->display_form();
       return false;
@@ -62,12 +71,14 @@
 
     public function validate($up_to = "") {
       $validate_response = [];
+      $Valid = [];
       foreach ($this->fields as $Field) {
         if ($Field['type'] == "html") continue;
+        if ($Field['page'] > $this->Input['af_page']) continue;
         $res = "";
         
         if (is_callable($Field['validate'])) {
-          $res = $Field['validate']($this->Input[$Field['field_name']] ?? "");
+          $res = $Field['validate']($this->Input[$Field['field_name']] ?? "", $this);
         }
         else if ($Field['validate']) {
           $check = $this->Input[$Field['field_name'] ?? ""] ?? "";
@@ -137,11 +148,18 @@
           }
         }
         if ($res) $validate_response[$Field['field_name']] = is_callable($res) ? $res($this) : $res;
-        if ($Field['field_name'] == $up_to) return $validate_response;
+        else $Valid[] = $Field['field_name'];
+        if ($Field['field_name'] == $up_to) break;
       }
-      $delay = time() - $_SESSION['start_timestamp'];
-      if ($delay < $this->robot_delay || $delay > 3600) {
-        $validate_response['other-errs'] = "Possible robot detected";
+      
+      if ($up_to === "" && $this->Input['af_page'] == $this->pages) {
+        $delay = time() - $_SESSION['start_timestamp'];
+        if ($delay < $this->robot_delay || $delay > 3600) {
+          $validate_response['other-errs'] = "Possible robot detected";
+        }
+      }
+      if ($up_to !== "" || !empty($validate_response)) {
+        foreach ($Valid as $fname) $validate_response[$fname] = "";
       }
       return $validate_response;
     }
@@ -152,6 +170,12 @@
 
     public function foot() {
       print is_callable($this->footer) ? ($this->footer)($this) : $this->footer;
+    }
+
+    public function wrap($content) {
+      $this->head();
+      print $content;
+      $this->foot();
     }
 
     public function set_head($header) {
@@ -172,79 +196,107 @@
         "method" => $this->method
       ]);
       foreach ($this->fields as $Field) {
-        if ($Field['type'] == "html") print is_callable($Field['html']) ? $Field['html']() : "$Field[html]\n";
+        if ($Field['type'] == "html") {
+          if ($Field['page'] == $this->Input['af_page']) {
+            print is_callable($Field['html']) ? $Field['html']() : "$Field[html]\n";
+          }
+        }
         else {
           $labeled_by = "";
-          if (!in_array($Field['type'], ["radio", "checkbox"])) {
-            print "  <af-field>\n";
-            print "    ".$this->tag("label", [
-              "for" => "af-$Field[field_name]"
-            ], $this->sanitize($Field['label']));
-          }
-          else {
-            print "    ".$this->tag("af-field", [
-              "role" => ($Field['type'] == "radio" ? "radio" : "")."group",
-              "labeled-by" => "af-label-$Field[field_name]"
-            ]);
-            print "    ".$this->tag(
-              "label",
-              ["id" => "af-label-$Field[field_name]"],
-              $this->sanitize($Field['label'])
-            );
-          }
-          print "    <af-value>\n";
-          if (in_array($Field['type'], ["select", "multiselect"])) {
-            [$brax, $mult] = $Field['type'] == "multiselect" ? ["[]", " multiple"] : ["", ""];
-            print "      ".$this->tag("select", [
-              "id" => "af-$Field[field_name]",
-              "name" => "$Field[field_name]$brax"
-            ] + $Field['Attributes'], NULL, $mult);
-            foreach ($Field['values'] as $val => $label) {
-              print "        ".$this->tag("option", ["value" => $val], $this->sanitize($label));
-            }
-            print "      </select>\n";
-          }
-          else if (in_array($Field['type'], ["checkbox", "radio"])) {
-            $vid = 0;
-            $brax = "";
-            if ($Field['type'] == "checkbox" && count($Field['values']) > 1) $brax = "[]";
-            foreach ($Field['values'] as $val => $label) {
-              print "      ".$this->tag("input", [
-                "id" => "af-$Field[field_name]-$vid",
-                "type" => $Field['type'],
-                "name" => "$Field[field_name]$brax",
-                "value" => $val
-              ] + $Field['Attributes']);
-              print "      ".$this->tag("label", [
-                "for" => "af-$Field[field_name]-$vid"
-              ], " ".$this->sanitize($label));
-              $vid++;
-            }
-          }
-          else if ($Field['type'] == "textarea") {
-            print    "      ".$this->tag("textarea", [
-              "id" => "af-$Field[field_name]",
-              "name" => $Field['field_name']
-            ] + $Field['Attributes'], "");
-          }
-          else {
-            print "      ".$this->tag("input", [
-              "type" => $Field['type'],
-              "id" => "af-$Field[field_name]",
-              "name" => $Field['field_name'],
-              "list" => !empty($Field['values']) ? "af-list-$Field[field_name]" : NULL
-            ] + $Field['Attributes']);
-            if (!empty($Field['values'])) {
-              print "      ".$this->tag("datalist", ["id" => "af-list-$Field[field_name]"]);
-              foreach ($Field['values'] as $key => $val) {
-                print "        ".$this->tag("option", ["value" => $val]);
+          if ($Field['page'] != $this->Input['af_page']) {
+            if ($Field['type'] == "multiselect" || ($Field['type'] == "checkbox" && count($Field['values']) > 1)) {
+              print $this->tag("select", [
+                "multiple" => true,
+                "name" => $Field['field_name']."[]",
+                "style" => "display: none;"
+              ]);
+              if (is_array($this->Input[$Field['field_name']] ?? "")) {
+                foreach ($this->Input[$Field['field_name']] as $val) {
+                  print "  ".$this->tag("option", ["value" => $val], "");
+                }
               }
-              print "      </datalist>\n";
+              print "</select>\n";
+            }
+            else {
+              print $this->tag("input", [
+                "type" => "hidden",
+                "name" => $Field['field_name']
+              ]);
             }
           }
-          print "      ".$this->tag("af-error", ["id" => "af-err-$Field[field_name]"], "");
-          print "    </af-value>\n";
-          print "  </af-field>\n";
+          else {
+            if (!in_array($Field['type'], ["radio", "checkbox"])) {
+              print "  <af-field>\n";
+              print "    ".$this->tag("label", [
+                "for" => "af-$Field[field_name]"
+              ], $this->sanitize($Field['label']));
+            }
+            else {
+              print "    ".$this->tag("af-field", [
+                "role" => ($Field['type'] == "radio" ? "radio" : "")."group",
+                "labeled-by" => "af-label-$Field[field_name]"
+              ]);
+              print "    ".$this->tag(
+                "label",
+                ["id" => "af-label-$Field[field_name]"],
+                $this->sanitize($Field['label'])
+              );
+            }
+            print "    <af-value>\n";
+            if (in_array($Field['type'], ["select", "multiselect"])) {
+              [$brax, $mult] = $Field['type'] == "multiselect" ? ["[]", true] : ["", NULL];
+              print "      ".$this->tag("select", [
+                "id" => "af-$Field[field_name]",
+                "name" => "$Field[field_name]$brax",
+                "multiple" => $mult
+              ] + $Field['attributes']);
+              foreach ($Field['values'] as $val => $label) {
+                print "        ".$this->tag("option", ["value" => $val], $this->sanitize($label));
+              }
+              print "      </select>\n";
+            }
+            else if (in_array($Field['type'], ["checkbox", "radio"])) {
+              $vid = 0;
+              $brax = "";
+              if ($Field['type'] == "checkbox" && count($Field['values']) > 1) $brax = "[]";
+              foreach ($Field['values'] as $val => $label) {
+                print "      ".$this->tag("input", [
+                  "id" => "af-$Field[field_name]-$vid",
+                  "type" => $Field['type'],
+                  "name" => "$Field[field_name]$brax",
+                  "value" => $val
+                ] + $Field['attributes']);
+                print "      ".$this->tag("label", [
+                  "for" => "af-$Field[field_name]-$vid"
+                ], " ".$this->sanitize($label));
+                $vid++;
+              }
+            }
+            else if ($Field['type'] == "textarea") {
+              print    "      ".$this->tag("textarea", [
+                "id" => "af-$Field[field_name]",
+                "name" => $Field['field_name']
+              ] + $Field['attributes'], "");
+            }
+            else {
+              print "      ".$this->tag("input", [
+                "type" => $Field['type'],
+                "id" => "af-$Field[field_name]",
+                "name" => $Field['field_name'],
+                "list" => !empty($Field['values']) ? "af-list-$Field[field_name]" : NULL
+              ] + $Field['attributes']);
+              if (!empty($Field['values'])) {
+                print "      ".$this->tag("datalist", ["id" => "af-list-$Field[field_name]"]);
+                foreach ($Field['values'] as $key => $val) {
+                  print "        ".$this->tag("option", ["value" => $val]);
+                }
+                print "      </datalist>\n";
+              }
+            }
+            print "      ".$this->tag("af-error", ["id" => "af-err-$Field[field_name]"], "");
+            print "    </af-value>\n";
+            print "  </af-field>\n";
+          }
         }
       }
       print "  ".$this->tag("af-error", ["id" => "af-err-other-errs"], "");
@@ -252,6 +304,10 @@
         "type" => "hidden",
         "name" => "af_action",
         "value" => hash("sha256", "continue$_SESSION[start_timestamp]")
+      ]);
+      print "  ".$this->tag("input", [
+        "type" => "hidden",
+        "name" => "af_page"
       ]);
       print "  ".$this->tag("input", [
         "type" => "button",
@@ -262,7 +318,7 @@
 
       print "<script>\n";
       if ($this->form_name != "form1") print '  AF_FORM_NAME = "'.$this->form_name.'";'."\n";
-      $Rpop = [];
+      $Rpop = ["af_page" => $this->Input['af_page']];
       foreach ($this->fields as $Field) {
         if (!isset($Field['field_name'])) continue;
         $Rpop[$Field['field_name']] = $this->Input[$Field['field_name']] ?? (
@@ -295,7 +351,7 @@
         $validate = $Info['validate'] ?? $validate;
         $values = $Info['values'] ?? $values;
         $default = $Info['default'] ?? $default;
-        $Attributes = $Info['Attributes'] ?? $Attributes;
+        $Attributes = $Info['attributes'] ?? $Attributes;
         foreach (["placeholder", "min", "max", "size", "maxlength", "pattern", "step", "autocomplete",
                   "autofocus", "required", "readonly", "disabled"] as $att_field) {
           if (!empty($Info[$att_field])) $Attributes[$att_field] = $Info[$att_field];
@@ -322,13 +378,18 @@
         "validate" => $validate,
         "default" => $default,
         "values" => $values,
-        "Attributes" => $Attributes
+        "attributes" => $Attributes,
+        "page" => $this->pages
       ];
       if ($type == "file") {
         if ($this->method != "POST") return $this->warn("GET method is incompatible with file inputs");
         $this->enctype = "multipart/form-data";
       }
       return true;
+    }
+
+    public function new_page() {
+      $this->pages++;
     }
 
     public function add_select($field_name, $label = "", $validate = false, $values = [], $default = "", $Attributes = []) {
@@ -354,7 +415,8 @@
     public function add_html($html) {
       $this->fields[] = [
         "type" => "html",
-        "html" => $html
+        "html" => $html,
+        "page" => $this->pages
       ];
     }
 
@@ -373,7 +435,7 @@
       foreach ($Attribs as $attrib => $val) {
         if (is_null($val)) continue;
         if (in_array($attrib, ["disabled", "autofocus", "multiple", "required", "disabled", "readonly"]) && $val) {
-          $att_string .= $attrib;
+          $att_string .= " $attrib";
         }
         else $att_string .= " ".$attrib.'="'.$this->sanitize($val).'"';
       }
@@ -384,6 +446,15 @@
       $tag_string = "<$tag_name".$this->att($Attribs)."$xtra>";
       if (!is_null($close_after)) $tag_string .= "$close_after</$tag_name>";
       return "$tag_string\n";
+    }
+
+    public function inp_set($var, $val) {
+      $this->Input[$var] = $val;
+      $this->Sanitized[$var] = $this->sanitize($val);
+    }
+
+    public function inp_unset($var) {
+      unset($this->Input[$var], $this->Sanitized[$var]);
     }
 
     private function warn($message) {

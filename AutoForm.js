@@ -1,4 +1,4 @@
-// Autoform v1.0
+// Autoform
 // By Mark Hall
 // https://abstract-productions.net
 "use strict";
@@ -206,7 +206,20 @@ function af_submit_form(ajax_validation, up_to = "") {
 
 function af_show_errors(Errors) {
   af_set_param("form af-error", "textContent", "");
-  for (let i in Errors) af_el(`af-err-${i}`).textContent = Errors[i];
+  for (let i in Errors) {
+    let inp_field = af_el(`af-${i}`);
+    if (inp_field) {
+      if (Errors[i] === "") {
+        inp_field.classList.add("af-valid");
+        inp_field.classList.remove("af-invalid");
+      }
+      else {
+        inp_field.classList.remove("af-valid");
+        inp_field.classList.add("af-invalid");
+      }
+    }
+    if (af_el(`af-err-${i}`)) af_el(`af-err-${i}`).textContent = Errors[i];
+  }
 }
 
 function af_init(ajax_validation, ajax_as_you_go) {

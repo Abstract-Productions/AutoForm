@@ -23,11 +23,11 @@ af-field {
     border: 1px solid #ccc;
     background: #fff;
 
-    &.valid {
-      border-color: #8f8;
+    &.af-valid {
+      border-color: #080;
     }
 
-    &.valid {
+    &.af-invalid {
       border-color: #f00;
     }
   }
