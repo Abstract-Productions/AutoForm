@@ -107,7 +107,7 @@ EOF
 ```
 
 This is just the tip of the iceberg - there are many more options for field and form settings and
-validation, and I'm working on the documentation for those.
+validation. Look at the documentation on the [GitHub Wiki](https://github.com/Abstract-Productions/AutoForm/wiki)
 
 ## Author
 
