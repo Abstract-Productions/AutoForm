@@ -192,7 +192,13 @@ function af_submit_form(ajax_validation, up_to = "") {
           return;
         }
       }
-      let json_data = JSON.parse(response);
+      let json_data;
+      try {
+        json_data = JSON.parse(response);
+      }
+      catch (e) {
+        json_data = {"other-errs": "Error in AJAX response - please reload the page"};
+      }
       if (af_is_obj(json_data)) af_show_errors(json_data);
       else console.error("Invalid AJAX response");
     });
