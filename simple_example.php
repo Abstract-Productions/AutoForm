@@ -35,7 +35,7 @@ EOF
     ]
   ]);
 
-  if ($AF->execute()) {
+  if ($AF()) {
     $AF->head();
     print "<p>Thank you for filling in the form, {$AF->Sanitized['first_name']}!</p>\n";
     $AF->foot();

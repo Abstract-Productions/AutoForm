@@ -11,7 +11,7 @@ also handles data validation and robot detection.
 ## Usage
 
 Copy AutoForm.php into your project directory and require it. Instantiate the AutoForm object, then
-after setting up your form fields, use the "execute" function, which will return TRUE only when all
+after setting up your form fields, call the object as a function, which will return TRUE only when all
 fields are filled out and validation is passed.
 
 The HTML around the form can be set via "header" and "footer" variables in the object, which can be
@@ -46,7 +46,7 @@ EOF
 
   // Form fields will go here
 
-  if ($AF->execute()) {
+  if ($AF()) {
     // Code here will be run after validation is complete
   }
 ```
@@ -56,7 +56,7 @@ with an associative array of arrays. The keys of the array serve as the field na
 following example, we set the visible label and the validation message for missing fields in an array
 for each field.
 
-In the block after the "execute" function, we show a simple message, using the "Santized" array, which
+In the block after calling the object, we show a simple message, using the "Santized" array, which
 holds an escaped copy of the POST variables. We also use the head() and foot() functions to show the
 form's header and footer HTML around the response.
 
